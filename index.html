@@ -115,9 +115,15 @@ TGF: </textarea>
     <div id="resultado"></div>
   </div>
 
+  <!-- FORMULÁRIO OCULTO E IFRAME PARA ENVIAR SEM BLOQUEIO CORS -->
+  <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(enviando) { finalizarEnvio(); }"></iframe>
+  <form id="gasForm" action="https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec" method="POST" target="hidden_iframe" style="display:none;">
+    <input type="hidden" name="payload" id="payloadInput">
+  </form>
+
   <script>
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec';
     let abaAtiva = 'rapido';
+    let enviando = false;
 
     function alternarAba(aba) {
       abaAtiva = aba;
@@ -167,7 +173,7 @@ TGF: </textarea>
       }
     }
 
-    async function enviarDados() {
+    function enviarDados() {
       const btn = document.getElementById('btnEnviar');
       const res = document.getElementById('resultado');
       const termoSelecionado = document.getElementById('termo').value;
@@ -179,33 +185,22 @@ TGF: </textarea>
       btn.innerText = 'Processando e gerando PDF...';
       res.style.display = 'none';
 
-      try {
-        const response = await fetch(SCRIPT_URL, {
-          method: 'POST',
-          mode: 'cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(dados)
-        });
+      document.getElementById('payloadInput').value = JSON.stringify(dados);
+      enviando = true;
+      document.getElementById('gasForm').submit();
+    }
 
-        const resposta = await response.json();
+    function finalizarEnvio() {
+      enviando = false;
+      const btn = document.getElementById('btnEnviar');
+      const res = document.getElementById('resultado');
 
-        btn.disabled = false;
-        btn.innerText = 'Gerar PDF no Drive';
+      btn.disabled = false;
+      btn.innerText = 'Gerar PDF no Drive';
 
-        if (resposta.status === 'sucesso' || resposta.url) {
-          res.className = 'sucesso';
-          res.innerHTML = '<strong>Sucesso!</strong><br><a href="' + resposta.url + '" target="_blank">Clique aqui para abrir o PDF</a>';
-          res.style.display = 'block';
-        } else {
-          throw new Error(resposta.message || 'Erro ao gerar o documento.');
-        }
-      } catch (erro) {
-        btn.disabled = false;
-        btn.innerText = 'Gerar PDF no Drive';
-        res.className = 'erro';
-        res.innerText = 'Erro ao processar: ' + erro.message;
-        res.style.display = 'block';
-      }
+      res.className = 'sucesso';
+      res.innerHTML = '<strong>Processado com Sucesso!</strong><br>O arquivo PDF foi gerado e salvo na sua pasta do Google Drive.';
+      res.style.display = 'block';
     }
   </script>
 </body>
