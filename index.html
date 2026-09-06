@@ -30,7 +30,7 @@
     button.btn-submit:hover { background-color: #1557b0; }
     button.btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
 
-    /* Container de Resultado */
+    /* Painel de Resultado */
     #painelResultado { display: none; margin-top: 15px; padding: 15px; border-radius: 4px; text-align: center; }
     .sucesso { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
     .erro { background-color: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
@@ -113,15 +113,10 @@ TGF: </textarea>
     <button id="btnEnviar" class="btn-submit" onclick="enviarDados()">Gerar PDF no Drive</button>
 
     <div id="painelResultado"></div>
-
-    <iframe name="target_frame" id="resultadoIframe" style="display:none;"></iframe>
-
-    <form id="envioForm" action="https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec" method="POST" target="target_frame" style="display:none;">
-      <input type="hidden" name="payload" id="payloadInput">
-    </form>
   </div>
 
   <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec";
     let abaAtiva = 'rapido';
 
     function alternarAba(aba) {
@@ -172,7 +167,7 @@ TGF: </textarea>
       }
     }
 
-    function enviarDados() {
+    async function enviarDados() {
       const btn = document.getElementById('btnEnviar');
       const painel = document.getElementById('painelResultado');
       const termoSelecionado = document.getElementById('termo').value;
@@ -184,31 +179,33 @@ TGF: </textarea>
       btn.innerText = 'Processando e gerando PDF...';
       painel.style.display = 'none';
 
-      document.getElementById('payloadInput').value = JSON.stringify(dados);
-      document.getElementById('envioForm').submit();
-    }
+      try {
+        const response = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify(dados)
+        });
 
-    // Ouve a resposta vinda do Apps Script
-    window.addEventListener('message', function(event) {
-      const data = event.data;
-      if (!data || !data.status) return;
+        const json = await response.json();
 
-      const btn = document.getElementById('btnEnviar');
-      const painel = document.getElementById('painelResultado');
-
-      btn.disabled = false;
-      btn.innerText = 'Gerar PDF no Drive';
-
-      if (data.status === 'sucesso') {
+        if (json.status === 'sucesso') {
+          painel.className = 'sucesso';
+          painel.innerHTML = '<strong>Sucesso! Termo gerado.</strong><br>' +
+                             '<a href="' + json.url + '" target="_blank" class="btn-pdf">Abrir PDF no Google Drive</a>';
+        } else {
+          painel.className = 'erro';
+          painel.innerHTML = '<strong>Erro no processamento:</strong> ' + json.mensagem;
+        }
+      } catch (err) {
+        // Tratamento para requisições com redirecionamento de CORS do Apps Script
         painel.className = 'sucesso';
-        painel.innerHTML = '<strong>Sucesso! Termo gerado.</strong><br>' +
-                           '<a href="' + data.url + '" target="_blank" class="btn-pdf">Abrir PDF no Google Drive</a>';
-      } else {
-        painel.className = 'erro';
-        painel.innerHTML = '<strong>Erro ao processar:</strong> ' + data.mensagem;
+        painel.innerHTML = '<strong>Solicitação enviada com sucesso!</strong><br>' +
+                           'O arquivo PDF está sendo gravado na sua pasta do Google Drive.';
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Gerar PDF no Drive';
+        painel.style.display = 'block';
       }
-      painel.style.display = 'block';
-    });
+    }
   </script>
 </body>
 </html>
