@@ -115,15 +115,9 @@ TGF: </textarea>
     <div id="resultado"></div>
   </div>
 
-  <!-- FORMULÁRIO OCULTO E IFRAME PARA ENVIAR SEM BLOQUEIO CORS -->
-  <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(enviando) { finalizarEnvio(); }"></iframe>
-  <form id="gasForm" action="https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec" method="POST" target="hidden_iframe" style="display:none;">
-    <input type="hidden" name="payload" id="payloadInput">
-  </form>
-
   <script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec';
     let abaAtiva = 'rapido';
-    let enviando = false;
 
     function alternarAba(aba) {
       abaAtiva = aba;
@@ -173,6 +167,29 @@ TGF: </textarea>
       }
     }
 
+    // Callback global chamado pelo JSONP quando o Apps Script responder
+    window.processarRespostaGAS = function(resposta) {
+      const btn = document.getElementById('btnEnviar');
+      const res = document.getElementById('resultado');
+
+      btn.disabled = false;
+      btn.innerText = 'Gerar PDF no Drive';
+
+      // Remove a tag script temporária criada para a requisição
+      const oldScript = document.getElementById('jsonp_script');
+      if (oldScript) oldScript.remove();
+
+      if (resposta.url || resposta.status === 'sucesso') {
+        res.className = 'sucesso';
+        res.innerHTML = '<strong>Sucesso!</strong><br><a href="' + resposta.url + '" target="_blank">Clique aqui para abrir o PDF</a>';
+        res.style.display = 'block';
+      } else {
+        res.className = 'erro';
+        res.innerText = 'Erro ao processar: ' + (resposta.message || resposta.erro || 'Falha na geração');
+        res.style.display = 'block';
+      }
+    };
+
     function enviarDados() {
       const btn = document.getElementById('btnEnviar');
       const res = document.getElementById('resultado');
@@ -185,22 +202,25 @@ TGF: </textarea>
       btn.innerText = 'Processando e gerando PDF...';
       res.style.display = 'none';
 
-      document.getElementById('payloadInput').value = JSON.stringify(dados);
-      enviando = true;
-      document.getElementById('gasForm').submit();
-    }
+      // Limpa scripts JSONP anteriores se houver
+      const oldScript = document.getElementById('jsonp_script');
+      if (oldScript) oldScript.remove();
 
-    function finalizarEnvio() {
-      enviando = false;
-      const btn = document.getElementById('btnEnviar');
-      const res = document.getElementById('resultado');
+      // Cria a chamada via script dinamico (JSONP)
+      const script = document.createElement('script');
+      script.id = 'jsonp_script';
+      const encodedData = encodeURIComponent(JSON.stringify(dados));
+      script.src = SCRIPT_URL + '?callback=processarRespostaGAS&data=' + encodedData;
+      
+      script.onerror = function() {
+        btn.disabled = false;
+        btn.innerText = 'Gerar PDF no Drive';
+        res.className = 'erro';
+        res.innerText = 'Erro de conexão ao tentar se comunicar com o Google Apps Script.';
+        res.style.display = 'block';
+      };
 
-      btn.disabled = false;
-      btn.innerText = 'Gerar PDF no Drive';
-
-      res.className = 'sucesso';
-      res.innerHTML = '<strong>Processado com Sucesso!</strong><br>O arquivo PDF foi gerado e salvo na sua pasta do Google Drive.';
-      res.style.display = 'block';
+      document.body.appendChild(script);
     }
   </script>
 </body>
