@@ -1,38 +1,204 @@
-function doPost(e) {
-  try {
-    var dados = {};
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Termos Hospitalares</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+    .container { max-width: 600px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h2 { margin-top: 0; color: #1a73e8; font-size: 20px; text-align: center; }
     
-    // Captura os dados vindos do formulário HTML
-    if (e.parameter && e.parameter.payload) {
-      dados = JSON.parse(e.parameter.payload);
-    } else if (e.postData && e.postData.contents) {
-      dados = JSON.parse(e.postData.contents);
+    label { font-weight: bold; font-size: 13px; display: block; margin-top: 10px; color: #444; }
+    input, select, textarea { width: 100%; padding: 9px; margin-top: 4px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+    textarea { height: 190px; font-family: monospace; line-height: 1.4; }
+
+    /* Navegação por Abas */
+    .nav-tabs { display: flex; border-bottom: 2px solid #e0e0e0; margin-top: 15px; margin-bottom: 15px; }
+    .tab-button { flex: 1; padding: 10px; text-align: center; background: none; border: none; font-size: 14px; font-weight: bold; color: #666; cursor: pointer; outline: none; border-bottom: 3px solid transparent; transition: 0.2s; }
+    .tab-button.active { color: #1a73e8; border-bottom: 3px solid #1a73e8; }
+    .tab-button:hover:not(.active) { color: #333; background-color: #f0f4f9; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Grid para Formulário Manual */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .full-width { grid-column: span 2; }
+
+    button.btn-submit { background-color: #1a73e8; color: white; border: none; padding: 12px; margin-top: 20px; width: 100%; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    button.btn-submit:hover { background-color: #1557b0; }
+    button.btn-submit:disabled { background-color: #ccc; cursor: not-allowed; }
+
+    #resultadoIframe { width: 100%; height: 90px; border: none; margin-top: 15px; display: none; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Gerador de Termos Hospitalares</h2>
+    
+    <label for="termo">Selecione o Modelo do Termo:</label>
+    <select id="termo">
+      <option value="TC">TC - Tomografia Computadorizada</option>
+      <option value="EDA">EDA - Endoscopia Digestiva Alta</option>
+    </select>
+
+    <!-- NAVEGAÇÃO ENTRE ABAS -->
+    <div class="nav-tabs">
+      <button type="button" class="tab-button active" onclick="alternarAba('rapido')">Modo Rápido (Texto IA)</button>
+      <button type="button" class="tab-button" onclick="alternarAba('manual')">Modo Manual (Campos)</button>
+    </div>
+
+    <!-- ABA 1: MODO RÁPIDO -->
+    <div id="aba-rapido" class="tab-content active">
+      <label for="blocoTexto">Cole ou ajuste as informações do paciente:</label>
+      <textarea id="blocoTexto">NOME: 
+PRONTUARIO: 
+DN: 
+SEXO: 
+MAE: 
+CLINICA: 
+ENFERMARIA: 
+LEITO: 
+TGF: </textarea>
+    </div>
+
+    <!-- ABA 2: MODO MANUAL -->
+    <div id="aba-manual" class="tab-content">
+      <div class="form-grid">
+        <div class="full-width">
+          <label>Nome Completo:</label>
+          <input type="text" id="m_nome" placeholder="Nome do paciente">
+        </div>
+        <div>
+          <label>Prontuário:</label>
+          <input type="text" id="m_prontuario" placeholder="Ex: 123456">
+        </div>
+        <div>
+          <label>Data Nasc. (DN):</label>
+          <input type="text" id="m_dn" placeholder="DD/MM/AAAA">
+        </div>
+        <div>
+          <label>Sexo:</label>
+          <select id="m_sexo">
+            <option value="">Selecione...</option>
+            <option value="M">MASCULINO</option>
+            <option value="F">FEMININO</option>
+          </select>
+        </div>
+        <div>
+          <label>TGF / Creatinina:</label>
+          <input type="text" id="m_tgf" placeholder="Ex: 85 ml/min">
+        </div>
+        <div class="full-width">
+          <label>Nome da Mãe:</label>
+          <input type="text" id="m_mae" placeholder="Nome da mãe do paciente">
+        </div>
+        <div>
+          <label>Clínica / Localizador:</label>
+          <input type="text" id="m_clinica" placeholder="Ex: CLINICA MEDICA">
+        </div>
+        <div>
+          <label>Enfermaria / Leito:</label>
+          <div style="display: flex; gap: 5px;">
+            <input type="text" id="m_enfermaria" placeholder="Enf (ex: 02)">
+            <input type="text" id="m_leito" placeholder="Leito (ex: 10)">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button id="btnEnviar" class="btn-submit" onclick="enviarDados()">Gerar PDF no Drive</button>
+
+    <!-- IFRAME RECEPTOR DO RESULTADO -->
+    <iframe name="target_frame" id="resultadoIframe" onload="finalizarEnvio()"></iframe>
+
+    <!-- FORMULÁRIO OCULTO VIA POST -->
+    <form id="envioForm" action="https://script.google.com/macros/s/AKfycbxqt8eLVYlATnPm2xbYg8DkxRlvLEB_sV-QUnykR-apXVQB4-FTwxTyKamZsV8O6PflFw/exec" method="POST" target="target_frame" style="display:none;">
+      <input type="hidden" name="payload" id="payloadInput">
+    </form>
+  </div>
+
+  <script>
+    let abaAtiva = 'rapido';
+    let processando = false;
+
+    function alternarAba(aba) {
+      abaAtiva = aba;
+      document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      if (aba === 'rapido') {
+        document.querySelectorAll('.tab-button')[0].classList.add('active');
+        document.getElementById('aba-rapido').classList.add('active');
+      } else {
+        document.querySelectorAll('.tab-button')[1].classList.add('active');
+        document.getElementById('aba-manual').classList.add('active');
+      }
     }
-    
-    // Executa a sua função nativa que cria o PDF
-    var resultado = processarEntradaEGerarPDF(dados);
-    var pdfUrl = (typeof resultado === 'object' && resultado.url) ? resultado.url : resultado;
 
-    // Retorna uma página HTML leve contendo o link do PDF diretamente
-    var htmlContent = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-      '<style>body{font-family:sans-serif;text-align:center;padding:20px;background:#e6f4ea;color:#137333;margin:0;}' +
-      'a{display:inline-block;margin-top:10px;padding:10px 20px;background:#1a73e8;color:white;text-decoration:none;border-radius:4px;font-weight:bold;}</style>' +
-      '</head><body>' +
-      '<strong>Sucesso! O termo foi gerado.</strong><br>' +
-      '<a href="' + pdfUrl + '" target="_blank">Clique aqui para abrir o PDF</a>' +
-      '</body></html>';
+    function parseTexto(texto) {
+      const objeto = {};
+      const linhas = texto.split('\n');
+      linhas.forEach(linha => {
+        const idxDoisPontos = linha.indexOf(':');
+        if (idxDoisPontos !== -1) {
+          const chaveBruta = linha.substring(0, idxDoisPontos).trim();
+          const valor = linha.substring(idxDoisPontos + 1).trim();
+          const chaveNorm = chaveBruta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+          if (chaveNorm) objeto[chaveNorm] = valor;
+        }
+      });
+      return objeto;
+    }
 
-    return HtmlService.createHtmlOutput(htmlContent)
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    function coletarDadosFormulario() {
+      if (abaAtiva === 'rapido') {
+        const texto = document.getElementById('blocoTexto').value;
+        return parseTexto(texto);
+      } else {
+        return {
+          nome: document.getElementById('m_nome').value,
+          prontuario: document.getElementById('m_prontuario').value,
+          dn: document.getElementById('m_dn').value,
+          sexo: document.getElementById('m_sexo').value,
+          mae: document.getElementById('m_mae').value,
+          clinica: document.getElementById('m_clinica').value,
+          enfermaria: document.getElementById('m_enfermaria').value,
+          leito: document.getElementById('m_leito').value,
+          tgf: document.getElementById('m_tgf').value
+        };
+      }
+    }
 
-  } catch (erro) {
-    var htmlErro = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-      '<style>body{font-family:sans-serif;text-align:center;padding:15px;background:#fce8e6;color:#c5221f;margin:0;}</style>' +
-      '</head><body>' +
-      '<strong>Erro ao processar:</strong> ' + erro.message +
-      '</body></html>';
+    function enviarDados() {
+      const btn = document.getElementById('btnEnviar');
+      const iframe = document.getElementById('resultadoIframe');
+      const termoSelecionado = document.getElementById('termo').value;
 
-    return HtmlService.createHtmlOutput(htmlErro)
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
-}
+      const dados = coletarDadosFormulario();
+      dados['termo'] = termoSelecionado;
+
+      btn.disabled = true;
+      btn.innerText = 'Processando e gerando PDF...';
+      iframe.style.display = 'none';
+
+      document.getElementById('payloadInput').value = JSON.stringify(dados);
+      processando = true;
+      document.getElementById('envioForm').submit();
+    }
+
+    function finalizarEnvio() {
+      if (!processando) return;
+      processando = false;
+
+      const btn = document.getElementById('btnEnviar');
+      const iframe = document.getElementById('resultadoIframe');
+
+      btn.disabled = false;
+      btn.innerText = 'Gerar PDF no Drive';
+      iframe.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
